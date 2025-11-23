@@ -59,18 +59,38 @@ class RAGEngine:
         self.vectorstore.persist()
         return len(chunks)
 
-    def _ollama_generate(self, prompt: str, images: List[str] = None) -> str:
-        payload = {
-            "model": self.text_model if not images else self.vision_model,
-            "prompt": prompt,
-            "stream": False
-        }
-        if images:
-            payload["images"] = images
+    def query_text(self, question: str) -> Dict[str, Any]:
+        docs = self.retriever.invoke(question)
+        context = "\n\n".join([doc.page_content for doc in docs])
 
-        resp = requests.post("http://localhost:11434/api/generate", json=payload)
-        resp.raise_for_status()
-        return resp.json()["response"]
+        prompt = f"""Use only the following context to answer the question.
+If you don't know, say "I don't know".
+
+Context:
+{context}
+
+Question: {question}
+Answer:"""
+
+        answer = self._ollama_generate(prompt)
+
+        # ←←← CORRECT SOURCES FORMAT (frontend expects "text") ←←←
+        sources = [
+            {
+                "text": doc.page_content,
+                "source": Path(doc.metadata.get("source", "unknown")).name,
+                "page": (doc.metadata.get("page", 0) or 0) + 1
+            }
+            for doc in docs
+            if doc.page_content.strip()
+        ]
+
+        return {
+            "answer": answer.strip() or "I couldn't find relevant information.",
+            "sources": sources,
+            "confidence": 0.94 if sources else 0.2,
+            "type": "text_rag"
+        }
 
     def query_text(self, question: str) -> Dict[str, Any]:
         docs = self.retriever.invoke(question)
@@ -88,12 +108,22 @@ Answer:"""
         answer = self._ollama_generate(prompt)
 
         sources = [
+    {
+        "text": doc.page_content,        # ← changed from "content" to "text"
+        "source": Path(doc.metadata.get("source", "")).name,
+        "page": doc.metadata.get("page", 0) + 1
+    }
+    for doc in docs
+]
+
+# Inside query_vision() — also fix the sources (it reuses text_result):
+        sources = [
             {
-                "content": doc.page_content[:400] + "..." if len(doc.page_content) > 400 else doc.page_content,
-                "source": Path(doc.metadata.get("source", "")).name,
-                "page": doc.metadata.get("page", "N/A") + 1
+                "text": src.get("content", "") or src.get("text", ""),  # safe fallback
+                "source": src.get("source", "unknown"),
+                "page": src.get("page", "N/A")
             }
-            for doc in docs
+            for src in text_result["sources"]
         ]
 
         return {
@@ -112,10 +142,10 @@ Answer:"""
         text_result = self.query_text(question)
 
         final_answer = f"""From the image (moondream):
-{vision_answer}
+    {vision_answer}
 
-From your uploaded documents:
-{text_result['answer']}"""
+    From your uploaded documents:
+    {text_result['answer']}"""
 
         return {
             "answer": final_answer.strip(),

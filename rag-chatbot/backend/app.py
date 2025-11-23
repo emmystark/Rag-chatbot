@@ -25,6 +25,27 @@ rag_engine = RAGEngine(
     vision_model="moondream:latest"     # you have this
 )
 
+
+# AUTO-LOAD YOUR EXTERNAL RESOURCES FOLDER ON STARTUP
+EXTERNAL_FOLDER = Path("/Volumes/Stark/Repo/Rag-chatbot/rag-chatbot/backend/data")  # ← CHANGE THIS
+
+if EXTERNAL_FOLDER.exists():
+    print(f"Auto-loading documents from {EXTERNAL_FOLDER}...")
+    for file_path in EXTERNAL_FOLDER.rglob("*.pdf"):
+        if file_path.stat().st_size > 100_000_000:  # skip files >100MB if you want
+            print(f"Skipping huge file: {file_path.name}")
+            continue
+        print(f"Indexing: {file_path.name}")
+        try:
+            rag_engine.add_document(str(file_path))
+        except Exception as e:
+            print(f"   Error: {e}")
+    print("Auto-load complete!")
+else:
+    print("External folder not found – skipping auto-load")
+
+
+
 UPLOAD_DIR = Path("uploads")
 UPLOAD_DIR.mkdir(exist_ok=True)
 
@@ -49,7 +70,7 @@ async def upload_document(file: UploadFile = File(...)):
     chunks = rag_engine.add_document(str(file_path))
     return {"message": "Uploaded & indexed", "filename": file.filename, "chunks": chunks}
 
-@app.post("/ask")
+@app.post("/chat")
 async def ask_question(request: QueryRequest):
     return rag_engine.query_text(request.question)
 
