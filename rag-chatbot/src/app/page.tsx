@@ -45,11 +45,16 @@ export default function Home() {
   };
 
   return (
-    <div className="w-full overflow-hidden h-full flex items-center justify-center bg-black">
-      <div className="flex flex-col top-20 relative opacity-90 h-4/5 w-160 m-10 p-10 rounded-lg bg-white shadow-lg text-black">
-      <MessageList messages={messages} />
-      <ChatInput onSubmit={sendMessage} disabled={loading} />
-    </div>
+    <div className="w-full overflow-hidden min-h-screen flex items-center justify-center bg-black">
+      <div>
+        <h1 className="text-green-700 text-4xl text-center relative top-1">Company Resource Seacrh</h1>
+        <div className="flex flex-col top-10 relative opacity- bg-transparent  w-160 m-10 p-10 rounded-lg bg-white shadow-lg text-black">
+          <MessageList messages={messages} />
+          <ChatInput onSubmit={sendMessage} disabled={loading} />
+        </div>
+      </div>
     </div>
   );
 }
+
+

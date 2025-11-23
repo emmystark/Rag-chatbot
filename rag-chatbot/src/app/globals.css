@@ -1,3 +1,5 @@
+@import url('https://fonts.googleapis.com/css2?family=Satoshi:wght@300;400;500;700;900&display=swap');
+
 @import "tailwindcss";
 
 @tailwind base;
@@ -73,4 +75,10 @@ root {
 }
 ::-webkit-scrollbar-thumb:hover {
   @apply bg-emerald-500/50;
+}
+
+
+/* Google Fonts: JetBrains Mono for pro AI feel */
+.font-mono {
+  font-family: var(--font-jetbrains), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
