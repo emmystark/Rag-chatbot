@@ -21,8 +21,7 @@ app.add_middleware(
 )
 
 rag_engine = RAGEngine(
-    text_model="deepseek-r1:1.5b",      # you have this
-    vision_model="moondream:latest"     # you have this
+    text_model="moondream:latest",      # you have this
 )
 
 
