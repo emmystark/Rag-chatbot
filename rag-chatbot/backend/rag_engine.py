@@ -1,55 +1,43 @@
-# rag_engine.py — SUPER SIMPLE, NO NEW PACKAGES, WORKS 100%
+# backend/rag_engine.py
 import os
 import base64
 import requests
 from pathlib import Path
 from typing import List, Dict, Any
-
-# OLD IMPORTS THAT ALWAYS WORK (no langchain-huggingface needed)
 from langchain_community.document_loaders import PyPDFLoader, TextLoader, Docx2txtLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings      # ← this one works
-from langchain_community.vectorstores import Chroma                  # ← this one works too
-
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import Chroma
 
 class RAGEngine:
-    def __init__(
-        self,
-        persist_directory: str = "./chroma_db",
-        text_model: str = "moondream:latest"        # ← change to whatever you have running
-    ):
+    def __init__(self, persist_directory: str = "./chroma_db", text_model: str = "moondream:latest"):
         self.persist_directory = persist_directory
         os.makedirs(persist_directory, exist_ok=True)
-
-        # Tiny, fast, 100% offline embedding model (80 MB)
-        self.embeddings = HuggingFaceEmbeddings(
-            model_name="sentence-transformers/all-MiniLM-L6-v2"
-        )
-
-        self.vectorstore = Chroma(
-            persist_directory=persist_directory,
-            embedding_function=self.embeddings
-        )
+        self.embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+        self.vectorstore = Chroma(persist_directory=persist_directory, embedding_function=self.embeddings)
         self.retriever = self.vectorstore.as_retriever(search_kwargs={"k": 5})
-
         self.text_model = text_model
 
-    def _ollama_generate(self, prompt: str) -> str:
+    def _ollama_generate(self, prompt: str, images: List[str] = None) -> str:
+        payload = {
+            "model": self.text_model,
+            "prompt": prompt,
+            "stream": False,
+            "options": {"temperature": 0.3, "num_ctx": 4096}
+        }
+        if images:
+            payload["images"] = images
+
         try:
-            resp = requests.post(
-                "http://localhost:11434/api/generate",
-                json={"model": self.text_model, "prompt": prompt, "stream": False},
-                timeout=180
-            )
-            resp.raise_for_status()
-            return resp.json()["response"]
+            r = requests.post("http://localhost:11434/api/generate", json=payload, timeout=180)
+            r.raise_for_status()
+            return r.json().get("response", "").strip()
         except Exception as e:
-            return f"[Error: {str(e)}]"
+            return f"[Model error: {e}]"
 
     def add_document(self, file_path: str) -> int:
         path = Path(file_path)
         ext = path.suffix.lower()
-
         if ext == ".pdf":
             loader = PyPDFLoader(file_path)
         elif ext in [".txt", ".md"]:
@@ -57,7 +45,7 @@ class RAGEngine:
         elif ext == ".docx":
             loader = Docx2txtLoader(file_path)
         else:
-            raise ValueError(f"Unsupported file: {ext}")
+            raise ValueError("Unsupported file")
 
         docs = loader.load()
         splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
@@ -67,41 +55,28 @@ class RAGEngine:
 
     def query_text(self, question: str) -> Dict[str, Any]:
         docs = self.retriever.invoke(question)
-        context = "\n\n".join([doc.page_content for doc in docs])
+        context = "\n\n".join([d.page_content for d in docs]) if docs else ""
 
-        prompt = f"""Use only the following context to answer. Be concise.
+        prompt = f"""Use this context to answer:
 
-Context:
 {context}
 
 Question: {question}
-Answer:"""
+Answer clearly:"""
 
         answer = self._ollama_generate(prompt)
 
         sources = [
             {
-                "text": doc.page_content,
-                "source": Path(doc.metadata.get("source", "unknown")).name,
-                "page": (doc.metadata.get("page", 0) or 0) + 1
+                "text": d.page_content,
+                "source": Path(d.metadata.get("source", "unknown")).name,
+                "page": (d.metadata.get("page", 0) or 0) + 1
             }
-            for doc in docs
-            if doc.page_content.strip()
+            for d in docs
         ]
 
         return {
-            "answer": answer.strip() or "No relevant info found.",
+            "answer": answer or "I don't know.",
             "sources": sources,
-            "confidence": 0.94 if sources else 0.2,
-            "type": "text_rag"
+            "confidence": 0.9 if sources else 0.1
         }
-
-    def clear_database(self):
-        import shutil
-        if os.path.exists(self.persist_directory):
-            shutil.rmtree(self.persist_directory)
-        os.makedirs(self.persist_directory, exist_ok=True)
-        self.vectorstore = Chroma(
-            persist_directory=self.persist_directory,
-            embedding_function=self.embeddings
-        )

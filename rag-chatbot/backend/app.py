@@ -1,90 +1,87 @@
-# app.py
-from fastapi import FastAPI, File, UploadFile, HTTPException, Form
+# backend/app.py
+import os
+import requests
+from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import List, Optional
-import uvicorn
-import os
+from datetime import datetime
 from pathlib import Path
-import base64
+import uvicorn
 
-from rag_engine import RAGEngine
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-app = FastAPI(title="Local RAG + Vision Chatbot", version="2.0")
-
+app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://localhost:3001"],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-rag_engine = RAGEngine(
-    text_model="moondream:latest",      # you have this
-)
+# Use your RAGEngine with moondream
+from rag_engine import RAGEngine
+rag = RAGEngine(text_model="moondream:latest")
 
-
-# AUTO-LOAD YOUR EXTERNAL RESOURCES FOLDER ON STARTUP
-EXTERNAL_FOLDER = Path("/Volumes/Stark/Repo/Rag-chatbot/rag-chatbot/backend/data")  # ← CHANGE THIS
-
-if EXTERNAL_FOLDER.exists():
-    print(f"Auto-loading documents from {EXTERNAL_FOLDER}...")
-    for file_path in EXTERNAL_FOLDER.rglob("*.pdf"):
-        if file_path.stat().st_size > 100_000_000:  # skip files >100MB if you want
-            print(f"Skipping huge file: {file_path.name}")
-            continue
-        print(f"Indexing: {file_path.name}")
-        try:
-            rag_engine.add_document(str(file_path))
-        except Exception as e:
-            print(f"   Error: {e}")
-    print("Auto-load complete!")
-else:
-    print("External folder not found – skipping auto-load")
-
-
-
-UPLOAD_DIR = Path("uploads")
-UPLOAD_DIR.mkdir(exist_ok=True)
+# Auto-load your documents
+DATA_DIR = Path("/Volumes/Stark/Repo/Rag-chatbot/rag-chatbot/backend/data")
+if DATA_DIR.exists():
+    print("Loading your documents...")
+    for pdf in DATA_DIR.rglob("*.pdf"):
+        if pdf.stat().st_size < 100_000_000:
+            print(f"Indexing: {pdf.name}")
+            try:
+                rag.add_document(str(pdf))
+            except Exception as e:
+                print(f"Failed {pdf.name}: {e}")
+    print("All documents loaded!")
 
 class QueryRequest(BaseModel):
     question: str
 
+class Message(BaseModel):
+    role: str
+    content: str
+    timestamp: str
+    sources: list = []
+
 @app.get("/")
-async def root():
-    return {"message": "Local RAG + Vision API ready", "models": ["deepseek-r1:1.5b", "moondream"]}
+def home():
+    return {"status": "RAG + moondream ready"}
 
-@app.post("/upload")
-async def upload_document(file: UploadFile = File(...)):
-    allowed = ['.pdf', '.txt', '.docx', '.md']
-    ext = Path(file.filename).suffix.lower()
-    if ext not in allowed:
-        raise HTTPException(400, f"Unsupported file type: {ext}")
-
-    file_path = UPLOAD_DIR / file.filename
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
-
-    chunks = rag_engine.add_document(str(file_path))
-    return {"message": "Uploaded & indexed", "filename": file.filename, "chunks": chunks}
-
+@app.post("/api/chat")
 @app.post("/chat")
-async def ask_question(request: QueryRequest):
-    return rag_engine.query_text(request.question)
+def chat(request: QueryRequest):
+    if not request.question.strip():
+        return {"messages": []}
+
+    result = rag.query_text(request.question.strip())
+    now = datetime.utcnow().isoformat() + "Z"
+
+    return {
+        "messages": [
+            {
+                "role": "user",
+                "content": request.question,
+                "timestamp": now
+            },
+            {
+                "role": "assistant",
+                "content": result["answer"],
+                "timestamp": now,
+                "sources": result["sources"]
+            }
+        ]
+    }
 
 @app.post("/vision")
-async def vision_question(
-    question: str = Form(...),
-    image: UploadFile = File(...)
-):
-    image_bytes = await image.read()
-    return rag_engine.query_vision(question, image_bytes)
-
-@app.delete("/clear")
-async def clear_all():
-    rag_engine.clear_database()
-    return {"message": "All documents cleared"}
+async def vision(question: str = "", image: UploadFile = File(...)):
+    from rag_engine import rag  # reuse
+    img_bytes = await image.read()
+    b64 = base64.b64encode(img_bytes).decode()
+    prompt = question or "Describe this image in detail."
+    answer = rag._ollama_generate(prompt, images=[b64])
+    return {"answer": answer}
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)

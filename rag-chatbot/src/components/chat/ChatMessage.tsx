@@ -5,8 +5,9 @@ import { Message } from "@/types";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Bot, User, Copy, Check } from "lucide-react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import CitationPopover from "./CitationPopover";
+import { format, formatDistanceToNow } from "date-fns";
 
 interface ChatMessageProps {
   message: Message;
@@ -14,6 +15,13 @@ interface ChatMessageProps {
 
 export default function ChatMessage({ message }: ChatMessageProps) {
   const [copied, setCopied] = useState(false);
+  const [now, setNow] = useState(new Date());
+
+  // Update time every 30 seconds so "5 minutes ago" stays fresh
+  useEffect(() => {
+    const interval = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(interval);
+  }, []);
 
   const copyToClipboard = () => {
     navigator.clipboard.writeText(message.content);
@@ -21,25 +29,38 @@ export default function ChatMessage({ message }: ChatMessageProps) {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  // Live relative time (e.g., "2 minutes ago", "1 hour ago")
+  const relativeTime = message.timestamp
+    ? formatDistanceToNow(new Date(message.timestamp), { addSuffix: true })
+    : "just now";
+
+  // Exact time for hover or fallback
+  const exactTime = message.timestamp
+    ? format(new Date(message.timestamp), "h:mm a")
+    : "now";
+
   return (
     <div
       className={`flex gap-4 ${
         message.role === "user" ? "justify-end" : "justify-start"
       }`}
     >
+      {/* Assistant Avatar + Live Time */}
       {message.role === "assistant" && (
-        <Avatar className="shrink-0">
-          <AvatarFallback className="bg-emerald-500 text-black">
-            <Bot className="w-5 h-5" />
-          </AvatarFallback>
-        </Avatar>
+        <div className="flex flex-col items-center gap-1.5">
+          <Avatar className="shrink-0">
+            <AvatarFallback className="bg-emerald-500 text-black">
+              <Bot className="w-5 h-5" />
+            </AvatarFallback>
+          </Avatar>
+          <span className="text-xs text-gray-500 whitespace-nowrap" title={exactTime}>
+            {relativeTime}
+          </span>
+        </div>
       )}
 
-      <div
-        className={`max-w-2xl ${
-          message.role === "user" ? "order-last" : ""
-        }`}
-      >
+      {/* Message Bubble */}
+      <div className={`max-w-2xl ${message.role === "user" ? "order-last" : ""}`}>
         <Card
           className={`p-4 shadow-lg border ${
             message.role === "user"
@@ -53,6 +74,7 @@ export default function ChatMessage({ message }: ChatMessageProps) {
             </ReactMarkdown>
           </div>
 
+          {/* Citations */}
           {message.sources && message.sources.length > 0 && (
             <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700 flex flex-wrap gap-2">
               {message.sources.map((src, i) => (
@@ -61,6 +83,7 @@ export default function ChatMessage({ message }: ChatMessageProps) {
             </div>
           )}
 
+          {/* Copy Button */}
           {message.role === "assistant" && (
             <Button
               variant="ghost"
@@ -82,12 +105,18 @@ export default function ChatMessage({ message }: ChatMessageProps) {
         </Card>
       </div>
 
+      {/* User Avatar + Live Time */}
       {message.role === "user" && (
-        <Avatar className="shrink-0">
-          <AvatarFallback className="bg-black text-emerald-500">
-            <User className="w-5 h-5" />
-          </AvatarFallback>
-        </Avatar>
+        <div className="flex flex-col items-center gap-1.5">
+          <Avatar className="shrink-0">
+            <AvatarFallback className="bg-black text-emerald-500">
+              <User className="w-5 h-5" />
+            </AvatarFallback>
+          </Avatar>
+          <span className="text-xs text-gray-500 whitespace-nowrap" title={exactTime}>
+            {relativeTime}
+          </span>
+        </div>
       )}
     </div>
   );

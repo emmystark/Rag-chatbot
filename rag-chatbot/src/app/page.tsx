@@ -1,5 +1,4 @@
 "use client";
-
 import { useState } from "react";
 import { v4 as uuidv4 } from "uuid";
 import MessageList from "@/components/chat/MessageList";
@@ -11,50 +10,58 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
 
   const sendMessage = async (content: string) => {
-    const userMsg: Message = { id: uuidv4(), role: "user", content };
-    setMessages((prev) => [...prev, userMsg]);
+    const userMsg: Message = {
+      id: uuidv4(),
+      role: "user",
+      content,
+      timestamp: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, userMsg]);
     setLoading(true);
 
     try {
       const res = await fetch("http://localhost:8000/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question: content }),
+        body: JSON.stringify({ question: content }),  // ← MUST BE "question"
       });
-      const data = await res.json();
 
-      const assistantMsg: Message = {
+      if (!res.ok) throw new Error("Network error");
+
+      const data = await res.json();
+      const assistantMsg = data.messages[1]; // backend returns both
+
+      setMessages(prev => [...prev, {
         id: uuidv4(),
         role: "assistant",
-        content: data.answer,
-        sources: data.sources,
-      };
-      setMessages((prev) => [...prev, assistantMsg]);
+        content: assistantMsg.content,
+        timestamp: assistantMsg.timestamp,
+        sources: assistantMsg.sources || []
+      }]);
+
     } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: uuidv4(),
-          role: "assistant",
-          content: "Sorry, I couldn't connect to the backend. Is it running?",
-        },
-      ]);
+      setMessages(prev => [...prev, {
+        id: uuidv4(),
+        role: "assistant",
+        content: "Sorry, I couldn't connect to the backend. Is it running?",
+        timestamp: new Date().toISOString(),
+      }]);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="w-full overflow-hidden min-h-screen flex items-center justify-center bg-black">
-      <div>
-        <h1 className="text-green-700 text-4xl text-center relative top-1">Company Resource Seacrh</h1>
-        <div className="flex flex-col top-10 relative opacity- bg-transparent  w-160 m-10 p-10 rounded-lg bg-white shadow-lg text-black">
-          <MessageList messages={messages} />
-          <ChatInput onSubmit={sendMessage} disabled={loading} />
-        </div>
+   <div className=" flex justify-center">
+     <div className="min-h-screen bg-black flex flex-col w-3/5 relative top-50 border-1 border-green-500 rounded-lg">
+      <h1 className="text-white text-4xl text-center py-8 font-bold">
+        Company Resource Search
+      </h1>
+      <div className="flex-1 max-w-4xl text-black mx-auto w-full p-4">
+        <MessageList messages={messages} />
+        <ChatInput onSubmit={sendMessage} disabled={loading} />
       </div>
     </div>
+   </div>
   );
 }
-
-
