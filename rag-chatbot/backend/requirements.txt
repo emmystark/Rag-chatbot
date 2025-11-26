@@ -12,3 +12,10 @@ torch
 pypdf
 python-docx
 unstructured
+
+requests
+PyPDF2
+docx2txt
+pillow
+transformers
+llama-cpp-python

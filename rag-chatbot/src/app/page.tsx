@@ -20,7 +20,7 @@ export default function Home() {
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:8000/chat", {
+      const res = await fetch("http://localhost:8000/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ question: content }),  // ← MUST BE "question"
@@ -53,7 +53,7 @@ export default function Home() {
 
   return (
    <div className=" flex justify-center">
-     <div className="min-h-screen bg-black flex flex-col w-3/5 relative top-50 border-1 border-green-500 rounded-lg">
+     <div className="min-h-screen bg-black flex flex-col w-4/5 relative top-50 border-1 border-green-500 rounded-lg">
       <h1 className="text-white text-4xl text-center py-8 font-bold">
         Company Resource Search
       </h1>
