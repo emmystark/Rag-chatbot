@@ -7,15 +7,15 @@ langchain
 langchain-community
 langchain-core
 langchain-text-splitters
+langchain-chroma
 sentence-transformers
 torch
 pypdf
 python-docx
 unstructured
-
 requests
 PyPDF2
 docx2txt
 pillow
 transformers
-llama-cpp-python
+llama-cpp-python>=0.2.85

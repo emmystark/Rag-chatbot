@@ -1,10 +1,11 @@
 import os
+import uvicorn
 from fastapi import FastAPI, File, UploadFile, HTTPException, Form
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
 from pathlib import Path
-import uvicorn
+from rag_engine import RAGEngine
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -17,7 +18,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from rag_engine import RAGEngine
 rag = RAGEngine()
 
 # Auto-load documents at startup
@@ -25,7 +25,7 @@ DATA_DIR = Path("/Volumes/Stark/Repo/Rag-chatbot/rag-chatbot/backend/data")
 if DATA_DIR.exists():
     print("Loading documents...")
     for file_path in DATA_DIR.rglob("*"):
-        if file_path.is_file() and file_path.stat().st_size < 1_000_000_000:
+        if file_path.is_file() and file_path.stat().st_size < 100_000_000:
             try:
                 rag.add_document(str(file_path))
                 print(f"Indexed: {file_path.name}")
